@@ -1,0 +1,26 @@
+# Environment / secrets
+.env
+
+# Generated data (regenerate via scripts/run_ingestion.py)
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# Claude Code local session state
+.claude/
+
+# DeepEval local cache
+.deepeval/
+
+# IDE
+.vscode/
+.idea/
+
+# Personal/unrelated scratch, not part of this project
+Claude outputs/
