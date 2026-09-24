@@ -20,6 +20,10 @@ if __name__ == "__main__":
         result = retriever.retrieve(SAMPLE_QUERY, candidate_k=20, final_k=5)
 
         print(f"Query: {SAMPLE_QUERY}\n")
+        print(f"========================\n")
+        print(f"Result: {result}\n")
+        print(f"========================\n")
+    
         print(f"Stage 1 — top {len(result['stage1_candidates'])} candidates by vector similarity:\n")
         for rank, r in enumerate(result["stage1_candidates"], start=1):
             snippet = r["chunk_content"][:70].replace("\n", " ")
