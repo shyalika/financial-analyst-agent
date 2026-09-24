@@ -31,7 +31,7 @@ This is a working, end-to-end RAG pipeline: ingest PDFs → table-aware extracti
 | Streamlit UI | ✅ Implemented, verified end-to-end | [app.py](app.py) |
 | Agents / LangGraph orchestration | 🚧 Stub only (empty dir) | `src/agents/` |
 | Config management | 🚧 Stub only (empty dir) | `config/` |
-| Tests | 🚧 Stub only (empty dir) | `tests/` |
+| Tests | ✅ Implemented — 73 tests, mocked APIs/DB, offline (§22) | [tests/](tests/) |
 | LangGraph checkpointing / fault recovery | ❌ Not started | — |
 | Ragas evaluation | ❌ Not attempted — confirmed non-functional in this environment (§17), DeepEval used instead | — |
 | LangSmith tracing | ❌ Not started (`LANGCHAIN_API_KEY`/`LANGCHAIN_PROJECT` present, unused) | — |
@@ -160,8 +160,9 @@ These are explicitly called out in [docs/roadmap.md](docs/roadmap.md) but not ye
 2. **Agent orchestration** (`src/agents/`) — no LangGraph graph, nodes, or state machine exists yet.
 3. **LangGraph persistent checkpointing** — the "mid-loop fault recovery" pillar from docs/roadmap.md has no implementation; there's no checkpointer, no graph to checkpoint.
 4. **Config management** (`config/`) — currently all configuration is ad hoc env vars read directly in each module; no centralized config loader.
-5. **Tests** (`tests/`) — empty; nothing in the ingestion pipeline is under automated test today.
-6. **Ragas evaluation**, **LangSmith tracing** — Ragas was tried and found non-functional in this environment (§17), DeepEval used instead; LangSmith integration not started.
+5. **Ragas evaluation**, **LangSmith tracing** — Ragas was tried and found non-functional in this environment (§17), DeepEval used instead; LangSmith integration not started.
+
+Automated tests (`tests/`) — previously listed here as an open gap — now exist; see §22. `app.py` (Streamlit UI) remains untested by this suite; UI testing needs a different approach (`streamlit.testing.v1.AppTest` or Playwright, per §19's one-off precedent) and is still open.
 
 ## 7. Known Issues / Tech Debt
 
@@ -501,8 +502,38 @@ An intermediate (buggy) version of this consolidation cost only $0.037 for all 7
 
 Re-running §12/§13/§15/§17/§20's eval suites against the consolidated pipeline (explicitly flagged in each section) — the debugging *methodology* in those sections is still valid and worth reading; the specific numbers are historical. Also not done: the templated natural-language restatement §18 proposed for the retrieval-confidence trade-off it found, and the metadata-filtering / period-disambiguation work §20 identified as the real fix for cross-document confusion.
 
+## 22. Test Suite — pytest, Mocked APIs/DB
+
+**Status: ✅ Done.** Everything called "tested"/"verified" through §21 was a one-off manual run against real APIs/real data, hand-judged, never repeatable. This section adds an actual automated suite: 73 tests across [tests/](tests/), `pytest tests/ -v`, no real OpenAI/Cohere network calls, no reads/writes against `data/financial_intelligence.db`. `app.py` (Streamlit) is explicitly out of scope — see §6.
+
+### One small source change for testability
+
+`SQLiteVectorStore.__init__` ([src/ingestion/vector_store.py](src/ingestion/vector_store.py)) gained an optional `db_path: str = None` parameter (defaults to the existing hardcoded production path — zero behavior change for every current caller), so tests can point it at a `tmp_path`-backed temp file. Same pattern already used for `TwoStageRetriever`'s optional `search` parameter (§18/§21).
+
+### Structure and approach
+
+```
+tests/
+├── conftest.py       — shared fixtures: fake OpenAI/Cohere response builders, mock clients, temp-db path
+├── ingestion/         — test_pdf_table_extraction.py, test_pipeline.py, test_vector_store.py
+├── retrieval/          — test_embedding_utils.py, test_hyde.py, test_query_expansion.py,
+│                          test_similarity_search.py, test_two_stage_retriever.py
+├── generation/         — test_answer_generator.py, test_faithfulness_eval.py
+└── utils/              — test_billing.py
+```
+
+- `vector_store.py`'s own tests use **real, temporary SQLite** (`tmp_path`-backed `SQLiteVectorStore(db_path=...)`) — that module's job *is* the SQL logic, so a mock would test nothing real. Every other module's dependency on `SQLiteVectorStore`/`SimilaritySearch` is mocked or faked instead.
+- `pdf_table_extraction.py`'s tests use small hand-built fake `page`/`region` objects (duck-typed to the exact pdfplumber surface the module calls — `.chars`, `.lines`, `.crop()`, `.filter()`, `.extract_words()`, `.extract_text()`) rather than rendering real PDFs — pdfplumber's own extraction is an external, already-tested library; the bugs this session actually found lived in the pairing/leftover logic layered on top of it, so that's what's under test. Two are explicit regressions for §21/earlier bugs: a multi-word label ("Statutory NPAT2") must not collapse to its last word, and a region with one successful pairing must still return its unconsumed remainder as `leftover_text`, not drop it (the footnotes-page data-loss bug).
+- `faithfulness_eval.py`'s tests use a hand-written `FakeMetric` double (not a bare `Mock`) whose `.measure()` mutates its own `.score`/`.reason` or raises, per a pre-scripted sequence — this exercises the real per-question `try/except` resilience and aggregate-average-excludes-failures logic, matching how DeepEval's real metrics behave (constructed once, called repeatedly, state read off the same object).
+- All OpenAI/Cohere clients are constructed with a dummy API key (set in `conftest.py`, harmless — no client library validates a key at construction time) and then have their `.client`/`.cohere_client` attribute swapped for a `MagicMock` before any test calls a method on it, so no test can accidentally reach the network.
+
+### Verification
+
+`pip install -r requirements-dev.txt && pytest tests/ -v` — 73 passed, ~4s, fully offline. Confirmed: `data/financial_intelligence.db`'s mtime unchanged across a full test run; `tests/` contains no real API keys and no reference to the production DB path (only a `tmp_path`-derived temp filename).
+
 ## Changelog
 
+- 2026-09-24 — Added §22 Test Suite: 73 pytest tests across `tests/ingestion/`, `tests/retrieval/`, `tests/generation/`, `tests/utils/`, all mocked/faked APIs and a real temp-file SQLite for `vector_store.py`'s own tests. Added optional `db_path` parameter to `SQLiteVectorStore.__init__` for test isolation (zero behavior change for existing callers). Regression tests added for both bugs found during §21 consolidation (label-phrase truncation, leftover-text data loss). Removed the "Tests — empty" gap from §2/§6.
 - 2026-09-15 — Added §21 Consolidation: merged the table-aware extraction branch (§18) into the primary ingestion pipeline, deleted all `_v3` files/tables, batched ingestion's embedding calls (`get_embedding_vectors`), removed `pypdf` from dependencies. Found and fixed a real data-loss bug during verification (regions with any successful label pairing were discarding the rest of their body text — lost an entire footnotes page's worth of real facts). Re-ingested all 7 documents (9,736 parent rows, $0.169343), re-derived both eval files' `expected_parent_ids`, re-verified the Streamlit app end-to-end. Added historical-result caveats to §12/§13/§15/§17/§20 and rewrote §2/§3/§5/§6/§18/§19 to describe the single consolidated pipeline instead of implying multiple live branches.
 - 2026-09-15 — Added §20 Multi-Document Corpus Expansion: all 7 raw PDFs now ingested (9,512 parent rows, up from 91), §17's eval re-run and dropped (Faithfulness 0.93→0.72, Context Precision 0.80→0.60) due to cross-document/cross-period confusion — concrete examples (Q1, Q5, Q8, Q12) plus the general RAG lesson (Faithfulness measures grounding, not correctness) and named production mitigations (metadata filtering, query routing, period markers, broader metric suite), none yet built. Generalized `scripts/run_ingestion.py` from one hardcoded file to a resilient folder scan (§3.4).
 - 2026-09-15 — Added §19 Streamlit UI (Module 07): wraps the course pipeline's `TwoStageRetriever` + `AnswerGenerator` in a real, verified-working app.py — headless-browser-driven test confirmed a real question produces a real answer with cited source chunks, no mockup data.

@@ -11,8 +11,8 @@ class SQLiteVectorStore:
     Resilient Relational Vector Store Engine utilizing native SQLite.
     Fully enforces Parent-Child structural mapping to prevent text data fragmentation.
     """
-    def __init__(self):
-        self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/financial_intelligence.db"))
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/financial_intelligence.db"))
         self._initialize_database()
 
     def _get_connection(self):
