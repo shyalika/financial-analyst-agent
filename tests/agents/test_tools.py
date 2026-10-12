@@ -35,14 +35,14 @@ def test_search_disclosures_input_rejects_non_string_query():
 
 
 def test_retrieve_returns_answer_and_parent_ids(mock_retriever, mock_generator):
-    result = RetrievalTool().retrieve(SearchDisclosuresInput(query="What was NPAT?"))
+    result = RetrievalTool().retrieve_disclosures(SearchDisclosuresInput(query="What was NPAT?"))
 
     assert result.answer == "NPAT was $10,982m"
     assert result.parent_ids == [4046, 8693]
 
 
 def test_retrieve_passes_query_and_final_k_to_retriever(mock_retriever, mock_generator):
-    RetrievalTool().retrieve(SearchDisclosuresInput(query="What was NPAT?", final_k=3))
+    RetrievalTool().retrieve_disclosures(SearchDisclosuresInput(query="What was NPAT?", final_k=3))
 
     mock_retriever.retrieve.assert_called_once_with("What was NPAT?", candidate_k=20, final_k=3)
 
@@ -51,4 +51,4 @@ def test_retrieve_wraps_errors_in_retrieval_tool_error(mock_retriever, mock_gene
     mock_retriever.retrieve.side_effect = RuntimeError("db down")
 
     with pytest.raises(RetrievalToolError):
-        RetrievalTool().retrieve(SearchDisclosuresInput(query="What was NPAT?"))
+        RetrievalTool().retrieve_disclosures(SearchDisclosuresInput(query="What was NPAT?"))

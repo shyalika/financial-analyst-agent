@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from src.generation import faithfulness_eval as faithfulness_eval_module
+from src.generation.answer_generator import Answer
 from src.generation.faithfulness_eval import evaluate_faithfulness_and_precision
 
 
@@ -38,9 +39,17 @@ def make_fake_retriever(chunks_by_question):
 
 
 def make_fake_generator(answer_by_question):
+    # generate_answer returns a real Answer (src/generation/answer_generator.py),
+    # not a bare string -- faithfulness_eval.py must pull .answer out of it
+    # before handing it to DeepEval's LLMTestCase(actual_output: str). A fake
+    # that just returned a string here would hide that exact bug (caught
+    # when this suite went green against a mocked string but a real Answer
+    # object broke LLMTestCase's pydantic validation).
     generator = MagicMock()
     generator.finops.usage.total_cost_usd = 0.02
-    generator.generate_answer.side_effect = lambda question, chunks: answer_by_question[question]
+    generator.generate_answer.side_effect = (
+        lambda question, chunks: Answer(answer=answer_by_question[question], parent_ids=[])
+    )
     return generator
 
 

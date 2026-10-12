@@ -2,6 +2,7 @@ import logging
 
 from pydantic import BaseModel
 from pydantic import ValidationError
+from pydantic import Field
 from src.retrieval.two_stage_retriever import TwoStageRetriever
 from src.generation.answer_generator import AnswerGenerator
 from src.generation.answer_generator import Answer
@@ -9,9 +10,8 @@ from src.generation.answer_generator import Answer
 logger = logging.getLogger("RetrievalTool")
 
 class SearchDisclosuresInput(BaseModel):
-    query: str
-    final_k: int = 5
-
+    query: str = Field(..., description="The search query or keywords to look up disclosures.")
+    final_k: int = Field(default=5, description="Maximum number of disclosure documents to return.")
 
 
 class RetrievalToolError(Exception):
@@ -23,7 +23,7 @@ class RetrievalTool:
         self.retriever = TwoStageRetriever()
         self.generator = AnswerGenerator()
          
-    def retrieve(self, input: SearchDisclosuresInput) -> Answer:
+    def retrieve_disclosures(self, input: SearchDisclosuresInput) -> Answer:
         try:
             retrievalResult = self.retriever.retrieve(input.query, candidate_k=20, final_k = input.final_k)
 

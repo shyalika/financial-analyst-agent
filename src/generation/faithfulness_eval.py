@@ -49,7 +49,7 @@ def evaluate_faithfulness_and_precision(top_k: int = 5) -> dict:
 
         test_case = LLMTestCase(
             input=question,
-            actual_output=answer,
+            actual_output=answer.answer,
             expected_output=expected_answer,
             retrieval_context=retrieval_context,
         )
@@ -58,7 +58,7 @@ def evaluate_faithfulness_and_precision(top_k: int = 5) -> dict:
         # generation failure (gpt-4o-mini exhausts its completion-token budget
         # without producing valid structured output — see SPEC.md §17). Catch
         # per-question so one flaky judge call doesn't drop the whole batch.
-        record = {"question": question, "answer": answer, "expected_answer": expected_answer}
+        record = {"question": question, "answer": answer.answer, "expected_answer": expected_answer}
 
         try:
             faithfulness_metric.measure(test_case)
